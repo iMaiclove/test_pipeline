@@ -1,0 +1,110 @@
+pipeline {
+    
+    agent any
+ 
+
+            parameters {
+        
+        booleanParam defaultValue: true, description: 'Do you want to store artifacts to appcenter?', name: 'STORE_ARTIFACTS'
+        booleanParam defaultValue: true, description: 'Do you want to get notifications when the pipeline finish?', name: 'GET_NOTIFICATIONS'
+
+    }
+
+    stages {
+        
+        
+        stage('Restore packages') {
+  steps {
+      dir("src"){
+          
+          bat "dotnet restore"
+    
+      }
+  }
+}
+ 
+        stage('Build') {
+            
+            
+            steps {
+              dir("src") {
+    bat "dotnet build"
+}
+                echo 'Building'
+            }
+        }
+        stage('Test') {
+            steps {
+                echo 'Testing..'
+            }
+        }
+        stage('Publish') {
+            steps {
+                dir("src") {
+    bat "dotnet publish"
+}
+    
+                echo 'Deploying....'
+            }
+        }
+         stage('Archive') {
+             
+             
+            steps {
+                
+                zip zipFile: 'release.zip', archive: false,  overwrite: true, dir: 'src/bin/Debug/net6.0/publish'
+                archiveArtifacts artifacts: 'release.zip', fingerprint: true
+                
+            }
+            
+            
+        }
+                stage('Store to appcenter'){
+                    
+         
+             environment {
+
+    APPCENTER_API_TOKEN = credentials('appCenterAPI')
+
+  }
+
+  when { 
+                expression { env.STORE_ARTIFACTS == 'true' }
+            }   
+     
+            
+            steps{
+                  
+            appCenter apiToken: "${env.APPCENTER_API_TOKEN}" ,
+            ownerName: 'ka1ox',
+            appName: 'demoApp',
+            pathToApp: 'release.zip',
+            buildVersion: '${BUILD_NUMBER}',
+            distributionGroups: 'dev'
+             
+            echo 'Storing...'
+            
+             
+             
+            }
+
+            
+        }
+
+        stage('Email notification') {
+
+                         when { 
+                expression { env.GET_NOTIFICATIONS == 'true' }
+            }   
+            steps {
+                
+                emailext body: '$PROJECT_NAME - Build # $BUILD_NUMBER - $BUILD_STATUS: Check console output at $BUILD_URL to view the results.',
+                subject: '$PROJECT_NAME - Build # $BUILD_NUMBER - $BUILD_STATUS!',
+                to: 'ka1ox@hotmail.com'
+                
+                echo 'Email notified'
+            }
+        }
+        
+    }
+}
